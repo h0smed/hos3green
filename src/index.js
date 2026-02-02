@@ -38,12 +38,17 @@ app.use(helmet({
   },
 }));
 
-// CORS configuration - restrict to your app
+// CORS configuration - allow all origins for mobile app
+// TODO: Restrict to specific origins in production
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
-  methods: ['POST'],
-  allowedHeaders: ['Content-Type', 'X-Request-ID'],
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'X-Request-ID', 'X-Client-Version', 'Authorization'],
+  credentials: false,
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 // Rate limiting - prevent abuse
 const limiter = rateLimit({

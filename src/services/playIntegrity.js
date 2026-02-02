@@ -30,10 +30,29 @@ const VERDICT_LABELS = {
 async function verifyPlayIntegrityToken(integrityToken, nonce) {
   try {
     // Initialize Google Auth with service account
-    const auth = new GoogleAuth({
-      keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH,
-      scopes: ['https://www.googleapis.com/auth/playintegrity'],
-    });
+    // Support both file path and JSON content in environment variable
+    let authConfig;
+    
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+      // Use JSON content from environment variable (recommended for Railway)
+      const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+      authConfig = {
+        credentials,
+        scopes: ['https://www.googleapis.com/auth/playintegrity'],
+      };
+      console.log('Using service account from GOOGLE_SERVICE_ACCOUNT_JSON environment variable');
+    } else if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH) {
+      // Use file path (local development)
+      authConfig = {
+        keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH,
+        scopes: ['https://www.googleapis.com/auth/playintegrity'],
+      };
+      console.log('Using service account from file:', process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH);
+    } else {
+      throw new Error('Neither GOOGLE_SERVICE_ACCOUNT_JSON nor GOOGLE_SERVICE_ACCOUNT_KEY_PATH is set');
+    }
+    
+    const auth = new GoogleAuth(authConfig);
 
     const client = await auth.getClient();
     const projectNumber = process.env.GOOGLE_CLOUD_PROJECT_NUMBER;
