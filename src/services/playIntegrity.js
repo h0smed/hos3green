@@ -267,6 +267,16 @@ function determineIntegrityLevel(deviceIntegrity, appIntegrity, accountDetails) 
     };
   }
 
+  // For testing/debug builds - treat MEETS_DEVICE_INTEGRITY as BASIC_INTEGRITY
+  if (verdicts.meetsDeviceIntegrity && !verdicts.meetsBasicIntegrity && !verdicts.meetsStrongIntegrity) {
+    console.log('[PlayIntegrity] Result: BASIC_INTEGRITY (fallback for testing)');
+    return {
+      level: INTEGRITY_LEVEL.BASIC,
+      verdicts,
+      description: 'Device has passed basic device integrity checks (testing/debug mode)',
+    };
+  }
+
   // Check for Device Integrity only (for testing/debug builds)
   // This is a fallback for when app recognition or licensing fails but device integrity is good
   if (verdicts.meetsDeviceIntegrity && (verdicts.meetsBasicIntegrity || verdicts.meetsStrongIntegrity)) {
