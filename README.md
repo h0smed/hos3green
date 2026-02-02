@@ -92,5 +92,4 @@ CMD ["npm", "start"]
 ## License
 
 MIT# hos3green
-# hos3green
-# hos3green
+
