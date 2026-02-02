@@ -21,16 +21,24 @@ function signResponse(payload) {
     throw new Error('Server configuration error');
   }
 
+  // Debug logging
+  console.log('[SIGN] Signing key length:', signingKey.length);
+  console.log('[SIGN] Signing key first 10 chars:', signingKey.substring(0, 10) + '...');
+
   // Create canonical string for signing
   const timestamp = Date.now();
   const payloadString = JSON.stringify(payload);
   const canonicalString = `${SIGNATURE_VERSION}:${timestamp}:${payloadString}`;
+  
+  console.log('[SIGN] Canonical string:', canonicalString);
   
   // Generate HMAC signature
   const signature = crypto
     .createHmac(ALGORITHM, signingKey)
     .update(canonicalString)
     .digest('base64');
+
+  console.log('[SIGN] Generated signature:', signature);
 
   return {
     data: payload,

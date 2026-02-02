@@ -35,12 +35,21 @@ async function verifyPlayIntegrityToken(integrityToken, nonce) {
     
     if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
       // Use JSON content from environment variable (recommended for Railway)
-      const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+      console.log('[PlayIntegrity] GOOGLE_SERVICE_ACCOUNT_JSON is set, parsing...');
+      let credentials;
+      try {
+        credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+        console.log('[PlayIntegrity] Service account parsed successfully');
+        console.log('[PlayIntegrity] Service account email:', credentials.client_email);
+        console.log('[PlayIntegrity] Project ID:', credentials.project_id);
+      } catch (parseError) {
+        console.error('[PlayIntegrity] Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON:', parseError.message);
+        throw new Error('Invalid GOOGLE_SERVICE_ACCOUNT_JSON format: ' + parseError.message);
+      }
       authConfig = {
         credentials,
         scopes: ['https://www.googleapis.com/auth/playintegrity'],
       };
-      console.log('Using service account from GOOGLE_SERVICE_ACCOUNT_JSON environment variable');
     } else if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH) {
       // Use file path (local development)
       authConfig = {
@@ -54,8 +63,12 @@ async function verifyPlayIntegrityToken(integrityToken, nonce) {
     
     const auth = new GoogleAuth(authConfig);
 
+    console.log('[PlayIntegrity] Getting auth client...');
     const client = await auth.getClient();
+    console.log('[PlayIntegrity] Auth client obtained successfully');
+
     const projectNumber = process.env.GOOGLE_CLOUD_PROJECT_NUMBER;
+    console.log('[PlayIntegrity] GOOGLE_CLOUD_PROJECT_NUMBER:', projectNumber);
 
     if (!projectNumber) {
       throw new Error('GOOGLE_CLOUD_PROJECT_NUMBER not configured');
@@ -63,7 +76,8 @@ async function verifyPlayIntegrityToken(integrityToken, nonce) {
 
     // Call Play Integrity API v1
     const url = `https://playintegrity.googleapis.com/v1/${projectNumber}:decodeIntegrityToken`;
-    
+    console.log('[PlayIntegrity] Calling Play Integrity API:', url);
+
     const response = await client.request({
       url,
       method: 'POST',
@@ -71,6 +85,9 @@ async function verifyPlayIntegrityToken(integrityToken, nonce) {
         integrity_token: integrityToken,
       },
     });
+
+    console.log('[PlayIntegrity] API response received, status:', response.status);
+    console.log('[PlayIntegrity] Response data keys:', Object.keys(response.data || {}));
 
     const tokenPayload = response.data.tokenPayloadExternal;
 
@@ -85,13 +102,24 @@ async function verifyPlayIntegrityToken(integrityToken, nonce) {
     }
 
     // Extract verdicts
+    console.log('[PlayIntegrity] Extracting verdicts from token payload...');
     const deviceIntegrity = tokenPayload.deviceIntegrity?.deviceRecognitionVerdict || [];
     const appIntegrity = tokenPayload.appIntegrity;
     const accountDetails = tokenPayload.accountDetails;
 
+    console.log('[PlayIntegrity] Device integrity verdicts:', deviceIntegrity);
+    console.log('[PlayIntegrity] App integrity:', JSON.stringify(appIntegrity));
+    console.log('[PlayIntegrity] Account details:', JSON.stringify(accountDetails));
+
+    const allowedPackages = (process.env.ALLOWED_PACKAGE_NAMES || '').split(',').filter(p => p);
+    console.log('[PlayIntegrity] Allowed packages:', allowedPackages);
+    console.log('[PlayIntegrity] Received package name:', appIntegrity?.packageName);
+
     // Validate package name
-    const allowedPackages = (process.env.ALLOWED_PACKAGE_NAMES || '').split(',');
     if (!allowedPackages.includes(appIntegrity?.packageName)) {
+      console.error('[PlayIntegrity] Package name validation failed!');
+      console.error('[PlayIntegrity] Expected one of:', allowedPackages);
+      console.error('[PlayIntegrity] Received:', appIntegrity?.packageName);
       return {
         success: false,
         level: INTEGRITY_LEVEL.UNKNOWN,
@@ -99,10 +127,14 @@ async function verifyPlayIntegrityToken(integrityToken, nonce) {
         code: 'INVALID_PACKAGE',
       };
     }
+    console.log('[PlayIntegrity] Package name validated successfully');
 
     // Determine integrity level based on verdicts
+    console.log('[PlayIntegrity] Determining integrity level...');
     const result = determineIntegrityLevel(deviceIntegrity, appIntegrity, accountDetails);
-    
+    console.log('[PlayIntegrity] Integrity level determined:', result.level);
+    console.log('[PlayIntegrity] Result description:', result.description);
+
     return {
       success: true,
       ...result,
@@ -112,12 +144,47 @@ async function verifyPlayIntegrityToken(integrityToken, nonce) {
 
   } catch (error) {
     console.error('Play Integrity verification error:', error.message);
-    
+    console.error('Full error object:', JSON.stringify({
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      response: error.response?.data,
+      responseStatus: error.response?.status,
+      responseStatusText: error.response?.statusText,
+    }, null, 2));
+
+    // Provide more specific error messages based on error type
+    let errorCode = 'VERIFICATION_ERROR';
+    let errorMessage = 'Verification failed';
+
+    if (error.message?.includes('invalid_grant')) {
+      errorCode = 'INVALID_SERVICE_ACCOUNT';
+      errorMessage = 'Service account authentication failed. Check GOOGLE_SERVICE_ACCOUNT_JSON.';
+    } else if (error.message?.includes('PERMISSION_DENIED')) {
+      errorCode = 'PERMISSION_DENIED';
+      errorMessage = 'Service account does not have Play Integrity API permission.';
+    } else if (error.message?.includes('API has not been used') || error.message?.includes('disabled')) {
+      errorCode = 'API_NOT_ENABLED';
+      errorMessage = 'Play Integrity API is not enabled in Google Cloud Console.';
+    } else if (error.message?.includes('project') && error.message?.includes('not found')) {
+      errorCode = 'INVALID_PROJECT';
+      errorMessage = 'Invalid GOOGLE_CLOUD_PROJECT_NUMBER. Check your project configuration.';
+    } else if (error.response?.status === 403) {
+      errorCode = 'FORBIDDEN';
+      errorMessage = 'Access denied to Play Integrity API. Check service account permissions.';
+    } else if (error.response?.status === 404) {
+      errorCode = 'NOT_FOUND';
+      errorMessage = 'Play Integrity API endpoint not found. Check project number.';
+    } else if (error.response?.status >= 500) {
+      errorCode = 'GOOGLE_SERVER_ERROR';
+      errorMessage = 'Google Play Integrity API server error. Please try again later.';
+    }
+
     return {
       success: false,
       level: INTEGRITY_LEVEL.UNKNOWN,
-      error: 'Verification failed',
-      code: 'VERIFICATION_ERROR',
+      error: errorMessage,
+      code: errorCode,
       details: process.env.NODE_ENV === 'development' ? error.message : undefined,
     };
   }

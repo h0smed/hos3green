@@ -80,7 +80,7 @@ router.post('/verify', validateRequest, async (req, res, next) => {
     const payload = {
       success: verificationResult.success,
       level: verificationResult.level,
-      description: verificationResult.description,
+      description: verificationResult.description || 'No description available',
       timestamp: new Date().toISOString(),
       requestId: responseRequestId,
     };
@@ -102,6 +102,12 @@ router.post('/verify', validateRequest, async (req, res, next) => {
     
     // Sign the response
     const signedResponse = signResponse(payload);
+    
+    // Debug: Log signature details for troubleshooting
+    console.log('[VERIFY] Response signed successfully');
+    console.log('[VERIFY] Signature version:', signedResponse.signature.version);
+    console.log('[VERIFY] Signature algorithm:', signedResponse.signature.algorithm);
+    console.log('[VERIFY] Signature timestamp:', signedResponse.signature.timestamp);
     
     // Set cache control headers to prevent caching
     res.set({
