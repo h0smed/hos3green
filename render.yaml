@@ -1,0 +1,22 @@
+# Render.com deployment configuration for Hos3Green Backend
+
+services:
+  - type: web
+    name: hos3green-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: GOOGLE_CLOUD_PROJECT_NUMBER
+        value: 708560085041
+      - key: ALLOWED_PACKAGE_NAMES
+        value: com.android.hos3green
+      # Add these as secrets in Render dashboard:
+      # - GOOGLE_SERVICE_ACCOUNT_KEY_PATH (will use environment variable instead)
+      # - JWT_SECRET
+      # - RESPONSE_SIGNING_KEY
