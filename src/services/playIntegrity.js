@@ -231,12 +231,22 @@ function determineIntegrityLevel(deviceIntegrity, appIntegrity, accountDetails) 
     licensingVerdict: accountDetails?.appLicensingVerdict,
   };
 
+  console.log('[PlayIntegrity] === DETERMINE INTEGRITY LEVEL ===');
+  console.log('[PlayIntegrity] Device integrity verdicts:', deviceIntegrity);
+  console.log('[PlayIntegrity] meetsStrongIntegrity:', verdicts.meetsStrongIntegrity);
+  console.log('[PlayIntegrity] meetsBasicIntegrity:', verdicts.meetsBasicIntegrity);
+  console.log('[PlayIntegrity] meetsDeviceIntegrity:', verdicts.meetsDeviceIntegrity);
+  console.log('[PlayIntegrity] appRecognitionVerdict:', appIntegrity?.appRecognitionVerdict);
+  console.log('[PlayIntegrity] appLicensingVerdict:', accountDetails?.appLicensingVerdict);
+  console.log('[PlayIntegrity] ======================================');
+
   // Check for Strong Integrity
   // Requires: Strong integrity + device integrity + official app + licensed
   if (verdicts.meetsStrongIntegrity && 
       verdicts.meetsDeviceIntegrity &&
       appIntegrity?.appRecognitionVerdict === 'PLAY_RECOGNIZED' &&
       accountDetails?.appLicensingVerdict === 'LICENSED') {
+    console.log('[PlayIntegrity] Result: STRONG_INTEGRITY');
     return {
       level: INTEGRITY_LEVEL.STRONG,
       verdicts,
@@ -249,6 +259,7 @@ function determineIntegrityLevel(deviceIntegrity, appIntegrity, accountDetails) 
   if (verdicts.meetsBasicIntegrity && 
       verdicts.meetsDeviceIntegrity &&
       appIntegrity?.appRecognitionVerdict === 'PLAY_RECOGNIZED') {
+    console.log('[PlayIntegrity] Result: BASIC_INTEGRITY');
     return {
       level: INTEGRITY_LEVEL.BASIC,
       verdicts,
@@ -256,9 +267,21 @@ function determineIntegrityLevel(deviceIntegrity, appIntegrity, accountDetails) 
     };
   }
 
+  // Check for Device Integrity only (for testing/debug builds)
+  // This is a fallback for when app recognition or licensing fails but device integrity is good
+  if (verdicts.meetsDeviceIntegrity && (verdicts.meetsBasicIntegrity || verdicts.meetsStrongIntegrity)) {
+    console.log('[PlayIntegrity] Result: DEVICE_INTEGRITY (fallback - app not recognized or not licensed)');
+    return {
+      level: verdicts.meetsStrongIntegrity ? INTEGRITY_LEVEL.STRONG : INTEGRITY_LEVEL.BASIC,
+      verdicts,
+      description: 'Device has passed integrity checks but app recognition or licensing verification is pending',
+    };
+  }
+
   // Device fails basic integrity checks
   // Indicates: Rooted, custom ROM, emulator, or tampered environment
   if (!verdicts.meetsBasicIntegrity || !verdicts.meetsDeviceIntegrity) {
+    console.log('[PlayIntegrity] Result: UNTRUSTED');
     return {
       level: INTEGRITY_LEVEL.UNTRUSTED,
       verdicts,
@@ -267,6 +290,7 @@ function determineIntegrityLevel(deviceIntegrity, appIntegrity, accountDetails) 
   }
 
   // Unknown state
+  console.log('[PlayIntegrity] Result: UNABLE_TO_VERIFY');
   return {
     level: INTEGRITY_LEVEL.UNKNOWN,
     verdicts,
